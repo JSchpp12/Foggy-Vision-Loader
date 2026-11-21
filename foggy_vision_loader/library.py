@@ -9,9 +9,9 @@ from types import TracebackType
 from typing import Optional, Type
 
 from .records import DISTANCE_METRICS, ImageRecord
-from .selection import Selection
+from .selection import Selection, _build_catalog_sql
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 DATABASE_FILE_NAME = "database.sqlite3"
 DATABASE_ENV = "FOGGY_VISION_DATABASE"
@@ -83,6 +83,8 @@ class FoggyVisionLibrary:
         else:
             self._data_dir = self._db_dir / "images"
         self._conn: Optional[sqlite3.Connection] = None
+        self._has_skybox = False
+        self.catalog_sql = _build_catalog_sql(False)
         # Fail fast: opening the read-only connection also validates the schema.
         self._conn = self._connect()
 
@@ -122,6 +124,8 @@ class FoggyVisionLibrary:
         connection.row_factory = sqlite3.Row
         try:
             _validate_schema(connection)
+            self._has_skybox = _detect_skybox(connection)
+            self.catalog_sql = _build_catalog_sql(self._has_skybox)
         except Exception:
             connection.close()
             raise
@@ -154,6 +158,7 @@ class FoggyVisionLibrary:
             "sessions": len(self.sessions()),
             "scenes": len(self.scenes()),
             "fog_types": len(self.fog_types()),
+            "skyboxes": len(self.skyboxes()),
             "images_with_visibility": query.has_visibility(True).count(),
             "images_with_masks": query.has_masks(True).count(),
             "simple_metric": query.visibility_metric("simple").count(),
@@ -180,6 +185,12 @@ class FoggyVisionLibrary:
     def fog_types(self) -> list[str]:
         return sorted(
             key for key in self.query().counts_by("fog_type") if key is not None
+        )
+
+    def skyboxes(self) -> list[str]:
+        """Skybox names recorded in the database; empty for legacy databases."""
+        return sorted(
+            key for key in self.query().counts_by("skybox") if key is not None
         )
 
     # ------------------------------------------------------------ path helpers
@@ -233,6 +244,24 @@ def _environment_database_path() -> str:
         "no database given; pass the database.sqlite3 file or set "
         f"{DATABASE_ENV}"
     )
+
+
+def _detect_skybox(connection: sqlite3.Connection) -> bool:
+    """Whether the database records skybox metadata on views.
+
+    Both the table and the ``view.skyboxID`` column are required; a partially
+    migrated schema falls back to the legacy catalog shape instead of raising.
+    """
+    tables = {
+        row[0]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )
+    }
+    if "skybox" not in tables:
+        return False
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(view)")}
+    return "skyboxID" in columns
 
 
 def _validate_schema(connection: sqlite3.Connection) -> None:

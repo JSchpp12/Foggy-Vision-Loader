@@ -24,7 +24,21 @@ _SESSION_GLOB = (
     "[0-9][0-9]-[0-9][0-9]-[0-9][0-9]/*"
 )
 
-_INNER_SQL = f"""
+def _build_inner_sql(include_skybox: bool) -> str:
+    """Build the per-image catalog query.
+
+    Skybox support is optional so databases created before skybox metadata was
+    recorded still work.  When absent, the column is a literal ``NULL`` so the
+    catalog exposes the same shape for every database.
+    """
+    if include_skybox:
+        skybox_column = "sb.name AS skybox_name"
+        skybox_join = "LEFT JOIN skybox AS sb ON sb.id = v.skyboxID"
+    else:
+        skybox_column = "NULL AS skybox_name"
+        skybox_join = ""
+
+    return f"""
 SELECT
     i.fileName                                        AS path,
     i.fileType                                        AS format,
@@ -56,7 +70,8 @@ SELECT
     vi.rayCount                                       AS ray_including_ray_count,
     md.fileName                                       AS ray_distance_path,
     mn.fileName                                       AS ray_normalized_distance_path,
-    mv.fileName                                       AS ray_validity_path
+    mv.fileName                                       AS ray_validity_path,
+    {skybox_column}
 FROM image AS i
 JOIN (
     SELECT colorImageID AS image_id, MIN(id) AS view_id
@@ -84,11 +99,15 @@ LEFT JOIN image AS mn    ON mn.id = vn.imageID
 LEFT JOIN view_image AS vv
        ON vv.viewID = v.id AND vv.role = 'ray_validity'
 LEFT JOIN image AS mv    ON mv.id = vv.imageID
+{skybox_join}
 WHERE i.fileType = 'color'
 """
 
-#: One row per color image, including the resolved visibility fallback.
-CATALOG_SQL = f"""
+
+def _build_catalog_sql(include_skybox: bool) -> str:
+    """One row per color image, including the resolved visibility fallback."""
+    inner_sql = _build_inner_sql(include_skybox)
+    return f"""
 SELECT
     base.*,
     COALESCE(
@@ -101,7 +120,7 @@ SELECT
         WHEN base.ray_including_average IS NOT NULL THEN '{RAY_INCLUDING_INVALID}'
         WHEN base.ray_excluding_average IS NOT NULL THEN '{RAY_EXCLUDING_INVALID}'
     END AS visibility_metric
-FROM ({_INNER_SQL}) AS base
+FROM ({inner_sql}) AS base
 """
 
 _ORDER_COLUMNS = {
@@ -124,6 +143,8 @@ _ORDER_COLUMNS = {
     "fog_type": "fog_type",
     "fog_volume_name": "fog_volume_name",
     "fog_volume": "fog_volume_name",
+    "skybox": "skybox_name",
+    "skybox_name": "skybox_name",
     "exp_fog_density": "exp_fog_density",
     "marched_density_multiplier": "marched_density_multiplier",
     "visibility_value": "visibility_value",
@@ -146,6 +167,8 @@ _COUNT_COLUMNS = {
     "fog_type": "fog_type",
     "fog_volume": "fog_volume_name",
     "fog_volume_name": "fog_volume_name",
+    "skybox": "skybox_name",
+    "skybox_name": "skybox_name",
     "session": "session",
     "date": "substr(session, 1, 10)",
     "metric": "visibility_metric",
@@ -241,6 +264,20 @@ class Selection:
         lowered = [name.lower() for name in names]
         return self._filter(
             f"lower(fog_volume_name) IN ({', '.join('?' for _ in lowered)})",
+            tuple(lowered),
+        )
+
+    def skybox(self, *names: str) -> "Selection":
+        """Filter by skybox name (case-insensitive).
+
+        Databases created before skybox metadata existed expose ``skybox_name``
+        as ``NULL``, so this matches nothing rather than failing.
+        """
+        if not names:
+            raise ValueError("skybox() requires at least one name")
+        lowered = [name.lower() for name in names]
+        return self._filter(
+            f"lower(skybox_name) IN ({', '.join('?' for _ in lowered)})",
             tuple(lowered),
         )
 
@@ -362,7 +399,7 @@ class Selection:
 
     def _select_sql(self, columns: str) -> tuple[str, tuple]:
         where, params = self._where_sql()
-        sql = f"SELECT {columns} FROM ({CATALOG_SQL}) AS img"
+        sql = f"SELECT {columns} FROM ({self.library.catalog_sql}) AS img"
         if where:
             sql += f" WHERE {where}"
         if self.order is not None:
@@ -377,7 +414,7 @@ class Selection:
 
     def count(self) -> int:
         where, params = self._where_sql()
-        sql = f"SELECT COUNT(*) FROM ({CATALOG_SQL}) AS img"
+        sql = f"SELECT COUNT(*) FROM ({self.library.catalog_sql}) AS img"
         if where:
             sql += f" WHERE {where}"
         return int(self.library.conn.execute(sql, params).fetchone()[0])
@@ -412,7 +449,7 @@ class Selection:
         where, params = self._where_sql()
         sql = (
             f"SELECT {expression} AS key, COUNT(*) AS n "
-            f"FROM ({CATALOG_SQL}) AS img"
+            f"FROM ({self.library.catalog_sql}) AS img"
         )
         if where:
             sql += f" WHERE {where}"
@@ -454,6 +491,7 @@ def _row_to_record(row: Any) -> ImageRecord:
         ray_validity_path=row["ray_validity_path"],
         visibility_value=row["visibility_value"],
         visibility_metric=row["visibility_metric"],
+        skybox_name=row["skybox_name"],
     )
 
 

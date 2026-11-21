@@ -71,6 +71,8 @@ class ImageRecord:
     visibility_value: Optional[float] = None
     visibility_metric: Optional[str] = None
 
+    skybox_name: Optional[str] = None
+
     @property
     def visibility_meters(self) -> Optional[float]:
         """Resolved visibility in the renderer's world units (treated as meters)."""

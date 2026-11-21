@@ -38,6 +38,7 @@ def test_record_metadata(ray_lib):
     assert record.camera_look_dir is not None
     assert record.fog_type == "marched"
     assert record.fog_volume_name == "windy_whipped"
+    assert record.skybox_name == "autumn_field_puresky_4k"
     assert record.exp_fog_density == 0.6
 
 
@@ -130,6 +131,30 @@ def test_fog_filters(ray_lib):
     assert ray_lib.query().exp_fog_density(min=0.6, max=0.6).count() == 6
     assert ray_lib.query().exp_fog_density(min=0.5, max=0.7).count() == 6
     assert ray_lib.query().exp_fog_density(max=0.5).count() == 0
+
+
+def test_skybox_filter(ray_lib):
+    assert ray_lib.query().skybox("autumn_field_puresky_4k").count() == 3
+    assert ray_lib.query().skybox("AUTUMN_FIELD_PURESKY_4K").count() == 3
+    assert ray_lib.query().skybox("cloudy_sky").count() == 2
+    assert ray_lib.query().skybox("nope").count() == 0
+    assert (
+        ray_lib.query()
+        .skybox("autumn_field_puresky_4k", "cloudy_sky")
+        .count()
+        == 5
+    )
+
+
+def test_legacy_database_has_no_skybox(legacy_lib):
+    assert legacy_lib.query().count() == 6
+    assert {record.skybox_name for record in legacy_lib.query().records()} == {
+        None
+    }
+    assert legacy_lib.query().counts_by("skybox") == {None: 6}
+    assert legacy_lib.query().skybox("autumn_field_puresky_4k").count() == 0
+    assert legacy_lib.skyboxes() == []
+    assert len(legacy_lib.query().order_by("skybox").records()) == 6
 
 
 def test_session_filters(ray_lib):
@@ -295,6 +320,11 @@ def test_counts_by(ray_lib):
         "windy_whipped": 4,
         "clouds": 2,
     }
+    assert ray_lib.query().counts_by("skybox") == {
+        "autumn_field_puresky_4k": 3,
+        "cloudy_sky": 2,
+        None: 1,
+    }
     assert ray_lib.query().counts_by("metric") == {
         RAY_INCLUDING_INVALID: 3,
         RAY_EXCLUDING_INVALID: 2,
@@ -328,6 +358,7 @@ def test_empty_selection_terminals(ray_lib):
         lambda q: q.terrain(""),
         lambda q: q.fog_type(),
         lambda q: q.fog_volume(),
+        lambda q: q.skybox(),
         lambda q: q.exp_fog_density(),
         lambda q: q.visibility(),
         lambda q: q.visibility(min_meters=10, max_meters=5),

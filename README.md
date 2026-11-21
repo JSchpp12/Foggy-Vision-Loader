@@ -41,7 +41,7 @@ from foggy_vision_loader import FoggyVisionLibrary
 
 lib = FoggyVisionLibrary("F:/data/foggyvision/database.sqlite3")
 print(lib.stats())
-print(lib.sessions(), lib.scenes(), lib.fog_types())
+print(lib.sessions(), lib.scenes(), lib.fog_types(), lib.skyboxes())
 
 q = lib.query()
 
@@ -51,6 +51,7 @@ q.scene_name("berthoud_pass_co", exact=True)     # exact name
 q.terrain("real").count()                        # rendering type
 q.fog_type("marched").count()
 q.fog_volume("clouds").count()
+q.skybox("autumn_field_puresky_4k").count()       # per-view skybox name
 q.exp_fog_density(min=0.5, max=0.7).count()
 q.sessions("2026-06-13_21-40-15").count()
 q.date_range("2026-06-13", "2026-06-14").count() # inclusive, session-based
@@ -65,6 +66,7 @@ foggy = (
     .scene_name("berthoud")
     .fog_type("marched")
     .fog_volume("clouds")
+    .skybox("autumn_field_puresky_4k")
     .visibility(max_meters=8000)
     .order_by("visibility_value")
 )
@@ -90,8 +92,17 @@ lib.close()
 Every filter returns a new `Selection`; only terminals (`count`, `records`,
 `iter_records`, `paths`, `absolute_paths`, `first`, `counts_by`) execute SQL.
 `order_by()` accepts a whitelist of record fields (`path`, `captured_at`,
-`visibility_value`, `scene_name`, `fog_type`, ...), while `where()` is a raw
-SQL escape hatch over the catalog columns.
+`visibility_value`, `scene_name`, `fog_type`, `skybox`, ...), while `where()` is
+a raw SQL escape hatch over the catalog columns.
+
+## Skybox
+
+Each record exposes `skybox_name` (the renderer's `skybox_info.name`), and
+`q.skybox("name")` filters case-insensitively. Databases created before skybox
+metadata existed still open normally: `skybox_name` is `None`,
+`counts_by("skybox")` returns `{None: n}`, `skybox(...)` matches zero rows, and
+`lib.skyboxes()` returns `[]`. Rebuild a dataset with `fogvis-cli rebuild` to
+backfill skybox names from the preserved Frame JSON sidecars.
 
 ## Visibility metrics
 

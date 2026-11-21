@@ -69,6 +69,7 @@ def test_null_visibility_properties():
     assert record.visibility_meters is None
     assert record.visibility_miles is None
     assert record.visibility_metric is None
+    assert record.skybox_name is None
     assert record.visibility_by_metric == {
         SIMPLE: None,
         RAY_INCLUDING_INVALID: None,

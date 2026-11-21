@@ -124,6 +124,17 @@ CREATE TABLE visibility_distance(
 CREATE INDEX idx_image_filename ON image(fileName);
 """
 
+#: Layered on top of ``SCHEMA_SQL``; the ALTER mirrors the importer's migration
+#: so the loader tests exercise the same upgrade path as a real database.
+SKYBOX_SQL = """
+CREATE TABLE skybox(
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+);
+ALTER TABLE view ADD COLUMN skyboxID INTEGER REFERENCES skybox(id);
+CREATE INDEX idx_view_skybox ON view(skyboxID);
+"""
+
 MASK_FILES = {
     "ray_distance": "Frame-{n}_distMask.tif",
     "ray_normalized_distance": "Frame-{n}_distNormSmlMask.tif",
@@ -142,6 +153,7 @@ class Frame:
     coverage_distance_miles: float = 10.0
     fog_type: str = "marched"
     fog_volume: str = "windy_whipped"
+    skybox: str | None = None
     exp_fog_density: float = 0.6
     density_multiplier: float = 1.0
     width: int = 1280
@@ -150,17 +162,21 @@ class Frame:
     metrics: dict = field(default_factory=dict)
 
 
-def create_schema(db_dir: Path) -> Path:
+def create_schema(db_dir: Path, *, include_skybox: bool = True) -> Path:
     """Create an empty but valid FoggyVision database; return its path."""
     db_dir = Path(db_dir)
     db_dir.mkdir(parents=True, exist_ok=True)
     database = db_dir / "database.sqlite3"
     with sqlite3.connect(database) as connection:
         connection.executescript(SCHEMA_SQL)
+        if include_skybox:
+            connection.executescript(SKYBOX_SQL)
     return database
 
 
-def build_db(db_dir: Path, frames: list[Frame]) -> Path:
+def build_db(
+    db_dir: Path, frames: list[Frame], *, include_skybox: bool = True
+) -> Path:
     """Create ``db_dir/database.sqlite3`` and populate it; return the db path."""
     db_dir = Path(db_dir)
     db_dir.mkdir(parents=True, exist_ok=True)
@@ -170,6 +186,8 @@ def build_db(db_dir: Path, frames: list[Frame]) -> Path:
 
     with sqlite3.connect(database) as connection:
         connection.executescript(SCHEMA_SQL)
+        if include_skybox:
+            connection.executescript(SKYBOX_SQL)
         cursor = connection.cursor()
 
         cursor.execute(
@@ -239,6 +257,15 @@ def build_db(db_dir: Path, frames: list[Frame]) -> Path:
             )
             environment_ids[frame.fog_volume] = cursor.lastrowid
 
+        skybox_ids: dict[str, int] = {}
+        if include_skybox:
+            for frame in frames:
+                if frame.skybox and frame.skybox not in skybox_ids:
+                    cursor.execute(
+                        "INSERT INTO skybox (name) VALUES (?)", (frame.skybox,)
+                    )
+                    skybox_ids[frame.skybox] = cursor.lastrowid
+
         for frame in frames:
             images_dir = db_dir / "images" / frame.session
             images_dir.mkdir(parents=True, exist_ok=True)
@@ -251,16 +278,31 @@ def build_db(db_dir: Path, frames: list[Frame]) -> Path:
             color_id = cursor.lastrowid
             (db_dir / "images" / color_path).write_bytes(b"")
 
-            cursor.execute(
-                """INSERT INTO view (colorImageID, cameraID, sceneID, environmentID)
-                   VALUES (?, ?, ?, ?)""",
-                (
-                    color_id,
-                    camera_id,
-                    scene_id,
-                    environment_ids[frame.fog_volume],
-                ),
-            )
+            if include_skybox:
+                cursor.execute(
+                    """INSERT INTO view (
+                           colorImageID, cameraID, sceneID, environmentID, skyboxID
+                       ) VALUES (?, ?, ?, ?, ?)""",
+                    (
+                        color_id,
+                        camera_id,
+                        scene_id,
+                        environment_ids[frame.fog_volume],
+                        skybox_ids.get(frame.skybox) if frame.skybox else None,
+                    ),
+                )
+            else:
+                cursor.execute(
+                    """INSERT INTO view (
+                           colorImageID, cameraID, sceneID, environmentID
+                       ) VALUES (?, ?, ?, ?)""",
+                    (
+                        color_id,
+                        camera_id,
+                        scene_id,
+                        environment_ids[frame.fog_volume],
+                    ),
+                )
             view_id = cursor.lastrowid
 
             if frame.masks:
@@ -309,6 +351,7 @@ def ray_frames() -> list[Frame]:
         Frame(
             session="2026-06-13_21-40-15",
             frame=0,
+            skybox="autumn_field_puresky_4k",
             density_multiplier=1.0,
             metrics={
                 "ray_including_invalid": {
@@ -323,6 +366,7 @@ def ray_frames() -> list[Frame]:
         Frame(
             session="2026-06-13_21-40-15",
             frame=1,
+            skybox="autumn_field_puresky_4k",
             density_multiplier=2.0,
             metrics={
                 "ray_including_invalid": {
@@ -337,6 +381,7 @@ def ray_frames() -> list[Frame]:
         Frame(
             session="2026-06-13_21-45-51",
             frame=8,
+            skybox="autumn_field_puresky_4k",
             density_multiplier=9.0,
             metrics={
                 "ray_including_invalid": dict(empty_excluding),
@@ -351,6 +396,7 @@ def ray_frames() -> list[Frame]:
         Frame(
             session="2026-06-13_21-45-51",
             frame=9,
+            skybox="cloudy_sky",
             density_multiplier=10.0,
             masks=False,
             metrics={
@@ -367,6 +413,7 @@ def ray_frames() -> list[Frame]:
             session="2026-06-13_22-01-00",
             frame=0,
             fog_volume="clouds",
+            skybox="cloudy_sky",
             density_multiplier=1.0,
             metrics={
                 "simple": {"value": 5000.0},

@@ -97,6 +97,7 @@ def test_valid_empty_database(tmp_path):
         stats = lib.stats()
         assert stats["color_images"] == 0
         assert stats["views"] == 0
+        assert stats["skyboxes"] == 0
         assert stats["earliest_session"] is None
 
 
@@ -122,6 +123,7 @@ def test_stats(ray_lib):
     assert stats["sessions"] == 4
     assert stats["scenes"] == 1
     assert stats["fog_types"] == 1
+    assert stats["skyboxes"] == 2
     assert stats["images_with_visibility"] == 6
     assert stats["images_with_masks"] == 5
     assert stats["simple_metric"] == 1
@@ -140,6 +142,7 @@ def test_sessions_scenes_fog_types(ray_lib):
     ]
     assert ray_lib.scenes() == ["berthoud_pass_co"]
     assert ray_lib.fog_types() == ["marched"]
+    assert ray_lib.skyboxes() == ["autumn_field_puresky_4k", "cloudy_sky"]
 
 
 def test_absolute_path_and_mask_paths(ray_lib):
@@ -156,7 +159,7 @@ def test_absolute_path_and_mask_paths(ray_lib):
 
 
 def test_public_exports_and_version():
-    assert foggy_vision_loader.__version__ == "0.2.0"
+    assert foggy_vision_loader.__version__ == "0.3.0"
     for name in ("FoggyVisionLibrary", "Selection", "ImageRecord"):
         assert hasattr(foggy_vision_loader, name)
 

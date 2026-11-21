@@ -29,3 +29,15 @@ def simple_lib(simple_db):
     library = FoggyVisionLibrary(simple_db)
     yield library
     library.close()
+
+
+@pytest.fixture
+def legacy_db(tmp_path):
+    return build_db(tmp_path / "legacy_db", ray_frames(), include_skybox=False)
+
+
+@pytest.fixture
+def legacy_lib(legacy_db):
+    library = FoggyVisionLibrary(legacy_db)
+    yield library
+    library.close()
