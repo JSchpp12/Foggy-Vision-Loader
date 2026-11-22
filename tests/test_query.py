@@ -193,6 +193,84 @@ def test_date_range(ray_lib):
     )
 
 
+def test_new_session_format_metadata(new_format_lib):
+    record = (
+        new_format_lib.query()
+        .where(
+            "path = ?",
+            ("2026-11-21_14-57-24-314_pid38604/Frame-0.png",),
+        )
+        .first()
+    )
+    assert record.session == "2026-11-21_14-57-24-314_pid38604"
+    assert record.captured_at == datetime(
+        2026, 11, 21, 14, 57, 24, 314000, tzinfo=timezone.utc
+    )
+
+
+def test_new_session_format_filters_and_ranges(new_format_lib):
+    assert new_format_lib.sessions() == [
+        "2026-11-21_14-57-24-314_pid38604",
+        "2026-11-21_14-57-25-001_pid38605",
+        "2026-11-21_14-57-25-999_pid38605",
+    ]
+    assert (
+        new_format_lib.query()
+        .sessions("2026-11-21_14-57-24-314_pid38604")
+        .count()
+        == 2
+    )
+    assert new_format_lib.query().date_range("2026-11-21").count() == 4
+    # A second-granularity bound includes every millisecond in that second.
+    assert (
+        new_format_lib.query()
+        .date_range("2026-11-21_14-57-24", "2026-11-21_14-57-24")
+        .count()
+        == 2
+    )
+    assert (
+        new_format_lib.query()
+        .date_range("2026-11-21_14-57-25", "2026-11-21_14-57-25")
+        .count()
+        == 2
+    )
+    assert (
+        new_format_lib.query()
+        .date_range(start="2026-11-21_14-57-25")
+        .count()
+        == 2
+    )
+    assert (
+        new_format_lib.query()
+        .date_range(end="2026-11-21_14-57-24")
+        .count()
+        == 2
+    )
+    # A full session folder name is accepted as a bound.
+    assert (
+        new_format_lib.query()
+        .date_range(
+            "2026-11-21_14-57-24-314_pid38604",
+            "2026-11-21_14-57-24-314_pid38604",
+        )
+        .count()
+        == 2
+    )
+
+
+def test_new_session_format_order(new_format_lib):
+    sessions = [
+        record.session
+        for record in new_format_lib.query().order_by("captured_at").records()
+    ]
+    assert sessions == [
+        "2026-11-21_14-57-24-314_pid38604",
+        "2026-11-21_14-57-24-314_pid38604",
+        "2026-11-21_14-57-25-001_pid38605",
+        "2026-11-21_14-57-25-999_pid38605",
+    ]
+
+
 def test_visibility_filters(ray_lib):
     assert ray_lib.query().visibility(max_meters=10000).count() == 2
     assert ray_lib.query().visibility(min_meters=11000).count() == 3

@@ -158,6 +158,13 @@ def test_absolute_path_and_mask_paths(ray_lib):
     assert all(path.exists() for path in masks.values())
 
 
+def test_stats_new_session_format(new_format_lib):
+    stats = new_format_lib.stats()
+    assert stats["sessions"] == 3
+    assert stats["earliest_session"] == "2026-11-21_14-57-24-314_pid38604"
+    assert stats["latest_session"] == "2026-11-21_14-57-25-999_pid38605"
+
+
 def test_public_exports_and_version():
     assert foggy_vision_loader.__version__ == "0.3.0"
     for name in ("FoggyVisionLibrary", "Selection", "ImageRecord"):

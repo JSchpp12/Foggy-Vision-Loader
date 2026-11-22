@@ -31,8 +31,12 @@ python -m pip install -e F:\repos\Foggy_Vision_Loader
 directory argument is rejected with a message showing the expected file path.
 `library.db_dir` is the file's parent, and `record.path` is POSIX-relative to
 `library.data_dir` (the sibling `images/` directory by default), so
-`library.data_dir / record.path` is the image file. Session folders
-(`YYYY-MM-DD_HH-MM-SS`) supply `record.captured_at`.
+`library.data_dir / record.path` is the image file. Session folders supply
+`record.session` and `record.captured_at`. Both formats are recognised:
+
+- `YYYY-MM-DD_HH-MM-SS/` (legacy)
+- `YYYY-MM-DD_HH-MM-SS-<millis>_pid<pid>/` (current; milliseconds are
+  preserved in `captured_at`, and the PID is part of `record.session`)
 
 ## Usage
 
@@ -143,7 +147,10 @@ the image tree is not the sibling `images/` directory.
 - One record is returned per color image. If a database ever has multiple
   views for one image, the library uses the lowest `view.id`.
 - Session folder names carry no timezone; `captured_at` treats them as UTC.
+  Millisecond/PID session folders are parsed with millisecond precision; the
+  full folder name, including `_pid<pid>`, is exposed as `record.session`.
   Legacy flat filenames without a `YYYY-MM-DD_HH-MM-SS/` prefix have a `None`
-  session and are excluded by `date_range()`.
+  session and are excluded by `date_range()`. `date_range()` compares at
+  second granularity, so a bound includes every millisecond in that second.
 - The loader never writes to the database. Build or rebuild a dataset with
   `fogvis-cli import` / `fogvis-cli rebuild` from the FoggyVision project.

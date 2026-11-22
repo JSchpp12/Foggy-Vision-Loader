@@ -448,6 +448,36 @@ def ray_frames() -> list[Frame]:
     ]
 
 
+def new_format_frames() -> list[Frame]:
+    """Frames whose session folders use milliseconds and a PID suffix."""
+    return [
+        Frame(
+            session="2026-11-21_14-57-24-314_pid38604",
+            frame=0,
+            skybox="autumn_field_puresky_4k",
+            metrics={"simple": {"value": 1000.0}},
+        ),
+        Frame(
+            session="2026-11-21_14-57-24-314_pid38604",
+            frame=1,
+            skybox="autumn_field_puresky_4k",
+            metrics={"simple": {"value": 2000.0}},
+        ),
+        Frame(
+            session="2026-11-21_14-57-25-001_pid38605",
+            frame=0,
+            skybox="cloudy_sky",
+            metrics={"simple": {"value": 3000.0}},
+        ),
+        Frame(
+            session="2026-11-21_14-57-25-999_pid38605",
+            frame=1,
+            skybox="cloudy_sky",
+            metrics={"simple": {"value": 4000.0}},
+        ),
+    ]
+
+
 def simple_frames() -> list[Frame]:
     """Two frames whose only metric is ``simple``."""
     return [

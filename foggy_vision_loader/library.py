@@ -140,13 +140,7 @@ class FoggyVisionLibrary:
     def stats(self) -> dict:
         query = self.query()
         connection = self.conn
-        earliest, latest = connection.execute(
-            "SELECT MIN(session), MAX(session) FROM ("
-            "SELECT substr(fileName, 1, 19) AS session FROM image "
-            "WHERE fileType = 'color' AND fileName GLOB "
-            "'[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_"
-            "[0-9][0-9]-[0-9][0-9]-[0-9][0-9]/*')"
-        ).fetchone()
+        sessions = self.sessions()
         return {
             "db_path": str(self.db_path),
             "db_dir": str(self.db_dir),
@@ -155,7 +149,7 @@ class FoggyVisionLibrary:
             "views": int(
                 connection.execute("SELECT COUNT(*) FROM view").fetchone()[0]
             ),
-            "sessions": len(self.sessions()),
+            "sessions": len(sessions),
             "scenes": len(self.scenes()),
             "fog_types": len(self.fog_types()),
             "skyboxes": len(self.skyboxes()),
@@ -168,8 +162,8 @@ class FoggyVisionLibrary:
             "ray_including_metric": query.visibility_metric(
                 "ray_including_invalid"
             ).count(),
-            "earliest_session": earliest,
-            "latest_session": latest,
+            "earliest_session": sessions[0] if sessions else None,
+            "latest_session": sessions[-1] if sessions else None,
         }
 
     def sessions(self) -> list[str]:

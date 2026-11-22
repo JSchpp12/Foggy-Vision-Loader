@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any, Iterator, Optional
@@ -18,11 +19,40 @@ if TYPE_CHECKING:  # pragma: no cover - avoids an import cycle at runtime
     from .library import FoggyVisionLibrary
 
 
-#: GLOB matching a session-folder prefix: YYYY-MM-DD_HH-MM-SS/
-_SESSION_GLOB = (
+#: Fixed-width date-time prefix shared by both session-folder formats.
+_SESSION_PREFIX = (
     "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_"
-    "[0-9][0-9]-[0-9][0-9]-[0-9][0-9]/*"
+    "[0-9][0-9]-[0-9][0-9]-[0-9][0-9]"
 )
+
+#: Legacy session folder: YYYY-MM-DD_HH-MM-SS/
+_SESSION_GLOB = f"{_SESSION_PREFIX}/*"
+
+#: Current session folder: YYYY-MM-DD_HH-MM-SS-<millis>_pid<pid>/
+#: (the earlier ``-pid`` spelling is also accepted)
+_SESSION_MS_GLOB = f"{_SESSION_PREFIX}-[0-9][0-9][0-9][-_]pid[0-9]*/*"
+
+#: Session folder name, matched against both formats.
+_SESSION_NAME = re.compile(
+    r"^(?P<base>[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2})"
+    r"(?:-(?P<fraction>[0-9]{1,6}))?"
+    r"(?:[-_]pid[0-9]+)?$"
+)
+
+
+def _session_expression(column: str) -> str:
+    """SQL expression yielding the session folder name, or NULL.
+
+    ``column`` must be the relative image path (``.../Frame-N.png``).  The
+    session is the first path component; it is returned in full so the
+    millisecond/PID suffix remains visible and filterable.
+    """
+    return (
+        f"CASE WHEN {column} GLOB '{_SESSION_GLOB}' "
+        f"OR {column} GLOB '{_SESSION_MS_GLOB}' "
+        f"THEN substr({column}, 1, instr({column}, '/') - 1) END"
+    )
+
 
 def _build_inner_sql(include_skybox: bool) -> str:
     """Build the per-image catalog query.
@@ -44,8 +74,7 @@ SELECT
     i.fileType                                        AS format,
     i.width                                           AS width,
     i.height                                          AS height,
-    CASE WHEN i.fileName GLOB '{_SESSION_GLOB}'
-         THEN substr(i.fileName, 1, 19) END           AS session,
+    {_session_expression("i.fileName")}              AS session,
     v.sceneID                                         AS scene_id,
     s.name                                            AS scene_name,
     s.terrainRenderingType                            AS terrain_rendering_type,
@@ -330,13 +359,17 @@ class Selection:
         if start is None and end is None:
             raise ValueError("date_range() requires start and/or end")
         selection: Selection = self
+        # Compare the fixed-width date-time prefix so sessions whose folder
+        # names carry millisecond/PID suffixes fall inside the bound's second.
         if start is not None:
             selection = selection._filter(
-                "session >= ?", (_session_bound(start, upper=False),)
+                "substr(session, 1, 19) >= ?",
+                (_session_bound(start, upper=False),),
             )
         if end is not None:
             selection = selection._filter(
-                "session <= ?", (_session_bound(end, upper=True),)
+                "substr(session, 1, 19) <= ?",
+                (_session_bound(end, upper=True),),
             )
         return selection
 
@@ -498,10 +531,16 @@ def _row_to_record(row: Any) -> ImageRecord:
 def _parse_session(value: Optional[str]) -> Optional[datetime]:
     if not value:
         return None
+    match = _SESSION_NAME.match(value)
+    if match is None:
+        return None
     try:
-        parsed = datetime.strptime(value, "%Y-%m-%d_%H-%M-%S")
+        parsed = datetime.strptime(match.group("base"), "%Y-%m-%d_%H-%M-%S")
     except ValueError:
         return None
+    fraction = match.group("fraction")
+    if fraction:
+        parsed = parsed.replace(microsecond=int(fraction.ljust(6, "0")[:6]))
     return parsed.replace(tzinfo=timezone.utc)
 
 
@@ -532,6 +571,9 @@ def _session_bound(value: "date | datetime | str", *, upper: bool) -> str:
                 raise ValueError(f"invalid date bound: {value!r}") from exc
             suffix = "23-59-59" if upper else "00-00-00"
             return f"{parsed_date.isoformat()}_{suffix}"
+        match = _SESSION_NAME.match(text)
+        if match is not None:
+            return match.group("base")
         for pattern in _STRING_FORMATS:
             try:
                 return datetime.strptime(text, pattern).strftime("%Y-%m-%d_%H-%M-%S")
