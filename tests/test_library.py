@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 import subprocess
 import sys
@@ -166,7 +167,13 @@ def test_stats_new_session_format(new_format_lib):
 
 
 def test_public_exports_and_version():
-    assert foggy_vision_loader.__version__ == "0.3.0"
+    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+    match = re.search(
+        r'(?ms)^\[project\].*?^version\s*=\s*"([^"]+)"',
+        pyproject.read_text(encoding="utf-8"),
+    )
+    assert match is not None
+    assert foggy_vision_loader.__version__ == match.group(1)
     for name in ("FoggyVisionLibrary", "Selection", "ImageRecord"):
         assert hasattr(foggy_vision_loader, name)
 

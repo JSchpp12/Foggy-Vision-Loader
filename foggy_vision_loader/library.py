@@ -11,8 +11,6 @@ from typing import Optional, Type
 from .records import DISTANCE_METRICS, ImageRecord
 from .selection import Selection, _build_catalog_sql
 
-__version__ = "0.3.0"
-
 DATABASE_FILE_NAME = "database.sqlite3"
 DATABASE_ENV = "FOGGY_VISION_DATABASE"
 
@@ -54,8 +52,9 @@ class FoggyVisionLibrary:
     rejected).  ``images_dir`` defaults to the ``images`` directory next to the
     database and is the root of every ``ImageRecord.path``.
 
-    The database is opened read-only; the loader never writes to it.  A
-    dataset is created with ``fogvis-cli import`` from the FoggyVision project.
+    This facade opens the database read-only and never writes to it.  Build or
+    rebuild a dataset with the package's ``fogvis-cli`` command (see
+    :mod:`foggy_vision_loader.data_importer`).
     """
 
     def __init__(
@@ -269,7 +268,8 @@ def _validate_schema(connection: sqlite3.Connection) -> None:
     if missing_tables:
         raise FoggyVisionSchemaError(
             "not a FoggyVision database (missing tables: "
-            f"{', '.join(missing_tables)}); build one with 'fogvis-cli import'"
+            f"{', '.join(missing_tables)}); build one with 'fogvis-cli import' "
+            "from foggy_vision_loader"
         )
     for table, required in _REQUIRED_COLUMNS.items():
         present = {
@@ -291,5 +291,4 @@ __all__ = [
     "FoggyVisionSchemaError",
     "ImageRecord",
     "Selection",
-    "__version__",
 ]

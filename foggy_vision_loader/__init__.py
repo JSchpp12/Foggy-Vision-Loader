@@ -1,8 +1,15 @@
-"""Read-only query and selection library for the FoggyVision dataset.
+"""Import, query, and selection library for the FoggyVision dataset.
 
-The package depends only on the Python standard library.  It reads a database
-produced by the FoggyVision project's ``fogvis-cli import`` command and exposes
-a fluent selection API::
+The query layer (:class:`FoggyVisionLibrary`) depends only on the Python
+standard library.  The import layer, exposed through the ``fogvis-cli``
+command, additionally uses Pillow and tqdm to read image dimensions and show
+progress.
+
+Build a database from renderer output::
+
+    fogvis-cli import --database media/db --images media/test
+
+Then query it with a fluent selection API::
 
     from foggy_vision_loader import FoggyVisionLibrary
 
@@ -25,7 +32,7 @@ from .records import (
     ImageRecord,
 )
 from .selection import Selection
-from .library import __version__
+from ._version import __version__
 
 __all__ = [
     "DATABASE_ENV",

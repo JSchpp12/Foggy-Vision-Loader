@@ -1,17 +1,48 @@
 # foggy_vision_loader
 
-Query and selection library for the FoggyVision synthetic fog image corpus.
+Import, query, and selection library for the FoggyVision synthetic fog image
+corpus.
 
-`foggy_vision_loader` reads a SQLite database produced by the FoggyVision
-project's `fogvis-cli import` command and serves composable queries from it.
-It is a pure reader: the database is opened read-only, no index is built, and
-the package has no third-party dependencies (Python 3.10+).
+`foggy_vision_loader` owns the dataset database layer. Its `fogvis-cli`
+command imports rendered frames and their JSON sidecars into a SQLite database
+and can clean up or rebuild it; the query layer then serves composable
+selections from that database. The query facade opens the database read-only,
+no query index is built, and querying has no third-party dependencies. Importing
+uses Pillow (image dimensions) and tqdm (progress), and requires Python 3.10+.
 
 ## Install
 
 ```powershell
 python -m pip install -e F:\repos\Foggy_Vision_Loader
 ```
+
+## Importing
+
+```powershell
+# Small bundled sample (3 sessions, 6 frames)
+fogvis-cli import --database media/db --images media/test
+
+# A rendered session directory (80 frames, ~400 MB copied)
+fogvis-cli import --database media/db --images F:\repos\2026-11-08_14-05-50
+
+# Remove orphaned image files on disk (no database rows are modified)
+fogvis-cli cleanup --database media/db
+
+# Wipe and rebuild the database from the existing images directory
+fogvis-cli rebuild --database media/db
+```
+
+`--database` is the database **directory**: the importer creates
+`database.sqlite3` and `images/` inside it. The loader and viewer, by contrast,
+take the `database.sqlite3` **file** itself.
+
+The importer accepts both JSON layouts used by the renderer (`image_files` /
+`distance_mask_images` wrappers and the older flat `file_name` / `ray_masks`
+keys). When a frame JSON contains a `skybox_info` block, its `name` is stored
+per view in the `skybox` table and linked from `view.skyboxID`; older frame
+JSONs without the block import as `NULL`. Importing into an existing database
+adds the new table/column in place, but only `fogvis-cli rebuild` re-reads the
+preserved Frame JSON sidecars and backfills skybox names for old views.
 
 ## Dataset layout
 
@@ -152,5 +183,5 @@ the image tree is not the sibling `images/` directory.
   Legacy flat filenames without a `YYYY-MM-DD_HH-MM-SS/` prefix have a `None`
   session and are excluded by `date_range()`. `date_range()` compares at
   second granularity, so a bound includes every millisecond in that second.
-- The loader never writes to the database. Build or rebuild a dataset with
-  `fogvis-cli import` / `fogvis-cli rebuild` from the FoggyVision project.
+- `FoggyVisionLibrary` never writes to the database. Build or rebuild a
+  dataset with this package's `fogvis-cli import` / `fogvis-cli rebuild`.

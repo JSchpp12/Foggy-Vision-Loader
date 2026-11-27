@@ -4,27 +4,27 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "foggy_vision_loader"
-version = "0.3.0"
-description = "Query and selection library for the FoggyVision synthetic fog image corpus"
+version = "0.4.0"
+description = "Import, query, and select the FoggyVision synthetic fog image corpus"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
   {name = "Jacob Schaupp", email = "jacob.schaupp@gmail.com"}
 ]
-keywords = ["fog", "visibility", "dataset", "sqlite", "computer-vision"]
-classifiers = [
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: 3.13",
-  "Operating System :: OS Independent",
-  "Topic :: Scientific/Engineering :: Image Processing",
+dependencies = [
+  "Pillow",
+  "tqdm",
 ]
 
+[project.scripts]
+fogvis-cli = "foggy_vision_loader.cli:main"
+
 [tool.setuptools]
-packages = ["foggy_vision_loader"]
+packages = [
+  "foggy_vision_loader",
+  "foggy_vision_loader.common",
+  "foggy_vision_loader.db",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
